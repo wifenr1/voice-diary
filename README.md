@@ -9,6 +9,8 @@ The same page, `index.html`, runs in two places:
 
 ## Setting up the home-screen app
 
+The full click-by-click guide is in [SETUP.md](SETUP.md). In short:
+
 ### 1. Deploy with Coolify
 1. **Pick an address.** For example `diary.yourdomain.de`. At your domain provider, add an **A record** for it that points to your netcup server's IP address. The app needs HTTPS to install on the home screen, and Coolify sets that up for this address.
 2. **Add the app in Coolify.** Choose **+ New → Private Repository (with GitHub App)**, pick `wifenr1/voice-diary` and the `main` branch.
