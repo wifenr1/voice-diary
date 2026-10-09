@@ -183,7 +183,7 @@ const EXAMPLES = [
 
 // HOSTED: running as its own home-screen app (not inside Claude)
 const HOSTED = !window.claude && /^https?:$/.test(location.protocol);
-const S = { downloads:null, editing:null, moves:{}, removing:null, tab:"days", entries:[], live:false, reviews:{}, focusDay:null, db:null, uid:null, sample:null, saving:false };
+const S = { syncState:"", downloads:null, editing:null, moves:{}, removing:null, tab:"days", entries:[], live:false, reviews:{}, focusDay:null, db:null, uid:null, sample:null, saving:false };
 const $ = s=>document.querySelector(s);
 const esc = s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const iso = d=>d.toLocaleDateString("sv-SE");
@@ -360,6 +360,7 @@ async function saveChapters(){
   const moves = S.moves;
   setBuckets(list); S.editing=null; S.moves={}; S.removing=null;
   try{ localStorage.setItem("diary.chapters",JSON.stringify(list)); }catch{}
+  markChapters();
   if (S.db && S.uid){ try{ await S.db.collection("data/users/"+S.uid).doc("chapters").set({kind:"chapters",list}); }catch{} }
   for (const en of S.entries){ let changed=false;
     en.items.forEach(it=>{ if (moves[it.b]){ it.b=moves[it.b]; changed=true; } });
@@ -510,7 +511,10 @@ function settingsHTML(){
       <label class="btn ghost sm" for="importFile">Import a backup</label><input type="file" id="importFile" accept=".json,application/json" hidden></div>
     ${HOSTED?`<div class="set-row"><label for="apikey">Your Claude API key</label>
       <div class="row"><input id="apikey" type="password" autocomplete="off" value="${esc(getKey())}" placeholder="sk-ant-…"><button class="btn ghost sm" id="keySave">Save</button></div>
-      <span class="status" style="font-weight:400">It stays on this phone and is only sent to Claude.</span></div>`:""}
+      <span class="status" style="font-weight:400">It stays on this phone and is only sent to Claude.</span></div>
+      <div class="set-row"><label for="syncpass">Diary password for your server</label>
+      <div class="row"><input id="syncpass" type="password" autocomplete="current-password" value="${esc(getSyncPass())}" placeholder="The DIARY_PASSWORD you set in Coolify"><button class="btn ghost sm" id="syncSave">Save</button></div>
+      <span class="status" style="font-weight:400" id="syncState">${esc(S.syncState||(getSyncPass()?"":"Not saving to your server yet."))}</span></div>`:""}
     <div class="status" id="setStatus"></div></section>`;
 }
 const getKey = ()=>{ try{return localStorage.getItem("diary.apikey")||""}catch{return ""} };
@@ -527,7 +531,7 @@ function wireSettings(){
     const f=e.target.files[0]; if (!f) return;
     try{
       const d=JSON.parse(await f.text()); if (d.app!=="voice-diary" || !Array.isArray(d.entries)) throw 0;
-      if (Array.isArray(d.chapters) && d.chapters.length){ setBuckets(d.chapters); try{localStorage.setItem("diary.chapters",JSON.stringify(BUCKETS))}catch{}
+      if (Array.isArray(d.chapters) && d.chapters.length){ setBuckets(d.chapters); try{localStorage.setItem("diary.chapters",JSON.stringify(BUCKETS))}catch{} markChapters();
         if (S.db && S.uid){ try{ await S.db.collection("data/users/"+S.uid).doc("chapters").set({kind:"chapters",list:BUCKETS}); }catch{} } }
       let n=0; for (const en of d.entries){ if (!en || !en.id || S.entries.some(x=>x.id===en.id)) continue; S.entries.push(en); n++; await persist(en); }
       S.entries.sort((a,b)=>a.createdAt-b.createdAt);
@@ -537,6 +541,7 @@ function wireSettings(){
   };
   if (!HOSTED) return;
   $("#keySave").onclick=()=>{ try{localStorage.setItem("diary.apikey",$("#apikey").value.trim())}catch{} st.textContent="Key saved."; };
+  $("#syncSave").onclick=()=>{ try{localStorage.setItem("diary.syncpass",$("#syncpass").value)}catch{} setSyncState("Connecting…"); syncNow(); };
 }
 
 /* Claude for the home-screen app: called straight from the phone with Anna's own key */
@@ -587,12 +592,54 @@ document.addEventListener("click",e=>{
 
 /* ---------- storage: private per-person db, else this browser ---------- */
 async function persist(entry){
+  entry.updatedAt = Date.now();
   if (S.db && S.uid){ try{ await S.db.collection("data/users/"+S.uid).doc(entry.id).set({kind:"entry",...entry}); return; }catch{} }
-  store.set(S.entries);
+  store.set(S.entries); queueSync();
 }
 async function persistReview(from,rv){
   if (S.db && S.uid){ try{ await S.db.collection("data/users/"+S.uid).doc("review-"+from).set({kind:"review",week:from,review:rv}); return; }catch{} }
   try{ localStorage.setItem("diary.reviews",JSON.stringify(S.reviews)); }catch{}
+  queueSync();
+}
+
+/* ---------- home-screen app: keep a copy on Anna's own server ---------- */
+const getSyncPass = ()=>{ try{return localStorage.getItem("diary.syncpass")||""}catch{return ""} };
+const chaptersAt = ()=>{ try{return +localStorage.getItem("diary.chaptersAt")||0}catch{return 0} };
+function markChapters(){ try{ localStorage.setItem("diary.chaptersAt",String(Date.now())); }catch{} queueSync(); }
+let syncTimer=null;
+function queueSync(){ if (!HOSTED || !getSyncPass()) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow,1000); }
+function setSyncState(text){ S.syncState=text; const el=$("#syncState"); if (el) el.textContent=text; }
+async function syncNow(){
+  const pw=getSyncPass(); if (!HOSTED || !pw) return;
+  const auth={authorization:"Bearer "+pw};
+  let r;
+  try{ r=await fetch("api/diary",{headers:auth,cache:"no-store"}); }catch{ setSyncState("Offline. Your changes are saved on this phone and will sync later."); return; }
+  if (r.status===401){ setSyncState("The server didn't accept that password."); return; }
+  if (r.status===429){ setSyncState("Too many wrong passwords. Try again in 15 minutes."); return; }
+  if (!r.ok){ setSyncState("Saving to your server isn't set up yet."); return; }
+  const srv = await r.json();
+  // merge: newest version of each entry wins, nothing gets dropped
+  const byId = new Map(S.entries.map(e=>[e.id,e]));
+  let pulled = 0;
+  for (const e of (srv.entries||[])){
+    const mine = byId.get(e.id);
+    if (!mine || (e.updatedAt||e.createdAt||0) > (mine.updatedAt||mine.createdAt||0)){ byId.set(e.id,e); pulled++; }
+  }
+  S.entries = [...byId.values()].sort((a,b)=>a.createdAt-b.createdAt);
+  store.set(S.entries);
+  for (const w in (srv.reviews||{})) if (!S.reviews[w]){ S.reviews[w]=srv.reviews[w]; pulled++; }
+  try{ localStorage.setItem("diary.reviews",JSON.stringify(S.reviews)); }catch{}
+  if (Array.isArray(srv.chapters) && srv.chapters.length && (srv.chaptersAt||0) > chaptersAt()){
+    setBuckets(srv.chapters); pulled++;
+    try{ localStorage.setItem("diary.chapters",JSON.stringify(BUCKETS)); localStorage.setItem("diary.chaptersAt",String(srv.chaptersAt)); }catch{}
+  }
+  try{
+    const w = await fetch("api/diary",{method:"PUT",headers:{...auth,"content-type":"application/json"},
+      body:JSON.stringify({entries:S.entries,chapters:BUCKETS,chaptersAt:chaptersAt(),reviews:S.reviews})});
+    if (!w.ok) throw 0;
+    setSyncState("Saved on your server · "+new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}));
+  }catch{ setSyncState("Couldn't save to your server just now. It will try again."); }
+  if (pulled && S.tab!=="speak" && !S.editing) render(true);
 }
 
 try{ const t=localStorage.getItem("diary.tab"); if (views[t]) S.tab=t; }catch{}
@@ -605,6 +652,7 @@ if (HOSTED){
   if (location.hash==="#week") S.tab="week";
 }
 render();
+if (HOSTED){ syncNow(); addEventListener("online",syncNow); document.addEventListener("visibilitychange",()=>{ if (document.visibilityState==="visible") syncNow(); }); }
 
 (async()=>{
   const c = window.claude; if (!c?.use) return;

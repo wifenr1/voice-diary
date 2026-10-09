@@ -1,12 +1,11 @@
-# Builds the home-screen app and serves it with nginx. Coolify deploys this directly.
-FROM node:22-alpine AS build
+# Builds the diary app and runs the small server that serves it and stores your diary.
+FROM node:22-alpine
 WORKDIR /app
-COPY index.html ./
+COPY index.html server.mjs ./
 COPY scripts ./scripts
 COPY public ./public
 RUN node scripts/build.mjs
-
-FROM nginx:1.27-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+ENV DATA_DIR=/data PORT=3000
+VOLUME /data
+EXPOSE 3000
+CMD ["node", "server.mjs"]

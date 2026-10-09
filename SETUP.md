@@ -42,9 +42,17 @@ Skip this if Coolify already shows your GitHub account under **Sources**.
 5. Set **Build Pack** to **Dockerfile** and click **Continue**.
 6. On the configuration page:
    - **Domains:** `https://diary.yourdomain.de`, using the address from step 1 and starting with **https://**
-   - **Ports Exposes:** `80`
-7. Click **Save**, then **Deploy** at the top right.
-8. Wait until the deployment log shows it finished, then open `https://diary.yourdomain.de` in a browser. You should see the diary.
+   - **Ports Exposes:** `3000`
+7. Open **Environment Variables**, click **+ Add**, and add:
+   - **Name:** `DIARY_PASSWORD`
+   - **Value:** a long password you make up, for example four random words. Your diary on the server is locked with it.
+8. Open **Persistent Storage** (also called **Storages**), click **+ Add** → **Volume**, and set:
+   - **Name:** `diary-data`
+   - **Destination Path:** `/data`
+
+   This is where your diary is kept. Without it, a redeploy would wipe it.
+9. Click **Save**, then **Deploy** at the top right.
+10. Wait until the deployment log shows it finished, then open `https://diary.yourdomain.de` in a browser. You should see the diary.
 
 Coolify gets the HTTPS certificate automatically. With the GitHub App connected, every push to `main` redeploys the diary.
 
@@ -66,8 +74,9 @@ Coolify gets the HTTPS certificate automatically. With the GitHub App connected,
 3. Scroll down, tap **Add to Home Screen**, then **Add**.
 4. Close Safari and open **Diary** from your home screen.
 5. Tap **Week** at the bottom, scroll to **Backup & settings**, paste your key into **Your Claude API key**, and tap **Save**.
-6. **Test it:** tap **Speak**, type "Today I went bouldering. Remind me to call Tom tomorrow at 6pm.", and tap **Save & sort into chapters**. It should land in Hobbies with a reminder below it. If it says "Sorted with simple rules", the key isn't working; check it in step 5.
-7. Tap **Add to Calendar** on the reminder. iPhone should show its "Add to Calendar" screen. Tell me if it doesn't.
+6. Below it, type your `DIARY_PASSWORD` into **Diary password for your server** and tap **Save**. It should say **Saved on your server**.
+7. **Test it:** tap **Speak**, type "Today I went bouldering. Remind me to call Tom tomorrow at 6pm.", and tap **Save & sort into chapters**. It should land in Hobbies with a reminder below it. If it says "Sorted with simple rules", the key isn't working; check it in step 5.
+8. Tap **Add to Calendar** on the reminder. iPhone should show its "Add to Calendar" screen. Tell me if it doesn't.
 
 The first time you tap the microphone, allow microphone access.
 
@@ -84,5 +93,7 @@ The first time you tap the microphone, allow microphone access.
 
 ## Good to know
 
-- Your entries live only on your phone. Use **Export my diary** now and then as a backup, because removing the app from your home screen also deletes its data.
+- **Your diary is on your phone and on your server.** Every change is saved to the server within a second. If you lose your phone, install the app on the new one, enter the same password, and everything comes back.
+- **The server keeps a daily copy** of the last 30 days in `/data/backups`, in case something goes wrong.
+- If you're offline, entries are kept on the phone and sent to the server when you're back online.
 - You can switch the GitHub repository back to **private**. Coolify still reads it through its GitHub App.
