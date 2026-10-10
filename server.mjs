@@ -185,6 +185,39 @@ const TOOLS = [
     annotations: { readOnlyHint: true },
   },
   {
+    name: "tidy_entry",
+    description:
+      "Rewrite an entry Anna spoke into the app itself (sorted_by \"app\" in list_entries). The app's speech recognition often garbles words and its sorting is simple, " +
+      "so rebuild the points from the transcript: fix what was misheard (she speaks English, sometimes mixed with German), keep her own words and first person, one point per story, " +
+      "each in exactly one chapter key from get_chapters. Give the full list of reminders in it, as in add_diary_entry; leave reminders out to keep the ones it has. The entry keeps its date and time.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The entry's id from list_entries" },
+        points: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { text: { type: "string" }, chapter: { type: "string", description: "Chapter key from get_chapters" } },
+            required: ["text", "chapter"],
+            additionalProperties: false,
+          },
+        },
+        reminders: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { title: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD" }, time: { type: "string", description: "HH:MM, 24h" } },
+            required: ["title", "date"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["id", "points"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "save_weekly_review",
     description:
       "Save Anna's weekly review so it shows in her diary app. First read the week with list_entries (Monday to Sunday). For each chapter with points, write a 1 to 3 sentence summary in second person (\"you\"), " +
@@ -257,11 +290,30 @@ async function callTool(name, a = {}) {
     const to = a.to || today();
     const names = Object.fromEntries(chaptersOf(d).map((c) => [c.k, c.name]));
     const entries = (d.entries || []).filter((e) => e.date >= a.from && e.date <= to).map((e) => ({
-      date: e.date, time: e.time,
+      id: e.id, date: e.date, time: e.time, sorted_by: e.source === "claude" ? "claude" : "app",
+      transcript: e.source === "claude" ? undefined : e.text,
       points: (e.items || []).map((i) => ({ chapter: i.b, chapter_name: names[i.b] || i.b, text: i.t })),
       reminders: e.reminders || [],
     }));
     return text({ from: a.from, to, count: entries.length, entries });
+  }
+  if (name === "tidy_entry") {
+    if (typeof a.id !== "string" || !Array.isArray(a.points) || !a.points.length) return fail("Give the entry id and at least one point.");
+    return withDiary(async (d) => {
+      const old = (d.entries || []).find((e) => e.id === a.id);
+      if (!old) return fail(`No entry with id ${a.id}. Use list_entries to find it.`);
+      const keys = new Set(chaptersOf(d).map((c) => c.k));
+      const unknown = a.points.filter((p) => !keys.has(p.chapter)).map((p) => p.chapter);
+      if (unknown.length) return fail(`Unknown chapter key(s): ${[...new Set(unknown)].join(", ")}. Call get_chapters for the valid keys.`);
+      const reminders = (a.reminders || []).filter((r) => r && r.title && isDate(r.date)).map((r) => ({ title: String(r.title).trim(), date: r.date, time: isTime(r.time) ? r.time : "" }));
+      const entry = {
+        ...old, source: "claude", tidied: true, updatedAt: Date.now(),
+        items: a.points.map((p) => ({ t: String(p.text).trim(), b: p.chapter })).filter((p) => p.t),
+        reminders: Array.isArray(a.reminders) ? reminders : old.reminders || [],
+      };
+      await save(merge(d, { entries: [entry] }));
+      return text(`Tidied the entry from ${entry.date} ${entry.time}: ${entry.items.length} point(s).`);
+    });
   }
   if (name === "save_weekly_review") {
     if (!isDate(a.week_start) || !Array.isArray(a.chapters)) return fail("Give week_start (YYYY-MM-DD) and chapters.");
@@ -287,7 +339,9 @@ async function rpc(msg) {
       protocolVersion: params?.protocolVersion || "2025-06-18",
       capabilities: { tools: {} },
       serverInfo: { name: "voice-diary", version: "1.0.0" },
-      instructions: "This is Anna's personal diary. When she tells you about her day or says \"diary: …\", call get_chapters, then add_diary_entry. When she asks for her weekly review, read the week with list_entries and save it with save_weekly_review.",
+      instructions: "This is Anna's personal diary. When she tells you about her day or says \"diary: …\", call get_chapters, then add_diary_entry. When she asks for her weekly review, read the week with list_entries and save it with save_weekly_review. " +
+        "When she says \"tidy my diary\", read the last two weeks with list_entries and rewrite every entry with sorted_by \"app\" using tidy_entry, then tell her what you changed. " +
+        "Do the same quietly before writing a weekly review.",
     });
   }
   if (method === "ping") return reply({});

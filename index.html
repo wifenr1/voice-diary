@@ -232,13 +232,13 @@ const views = {
       <div class="eyebrow">${esc(today)}</div>
       <h1>Tell me about today</h1>
       <p class="lede">Talk freely. I'll write it down and sort each part into its chapter.</p>
-      ${HOSTED && !getKey() ? `<div class="banner"><span>For smart sorting, tell Claude <b>"diary: …"</b> instead, and it lands here. Anything saved below is sorted with simple rules.</span></div>` : ""}
+      ${HOSTED && !getKey() ? `<div class="banner"><span>For the best result, tap <b>Send to Claude</b>: Claude tidies your words and sorts them, and the entry lands here. <b>Save</b> keeps them as heard, and you can ask Claude to "tidy my diary" later.</span></div>` : ""}
       <div class="recorder">
         <button class="mic" id="mic" aria-label="Start speaking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
         <div class="mic-label" id="micLabel">Tap to speak</div>
         <div class="row" style="justify-content:center;gap:6px" role="group" aria-label="Language I speak">${[["en-GB","English"],["de-DE","Deutsch"]].map(([c,n])=>`<button class="btn ${getLang()===c?"":"ghost "}sm" data-lang="${c}" aria-pressed="${getLang()===c}">${n}</button>`).join("")}</div>
         <textarea id="draft" placeholder="Your words appear here. You can also tap the microphone on your phone's keyboard and dictate straight into this box."></textarea>
-        <div class="row"><button class="btn" id="save">Save & sort into chapters</button><span class="status" id="saveStatus"></span></div>
+        <div class="row"><button class="btn" id="save">Save & sort into chapters</button>${HOSTED && !getKey() ? `<button class="btn ghost" id="toClaude">Send to Claude</button>` : ""}<span class="status" id="saveStatus"></span></div>
       </div>
       ${upcomingHTML()}</main>`;
   },
@@ -441,6 +441,15 @@ function wireSpeak(){
     try{ rec.start(); }catch{ label.textContent="Tap the box, then the microphone on your keyboard to dictate."; rec=null; }
   };
   $("#save").onclick = saveEntry;
+  // Claude sorts and saves it through the diary connector, so it comes back here tidied.
+  const tc=$("#toClaude"); if (tc) tc.onclick = async ()=>{
+    const words=draft.value.trim(); if (!words){ $("#saveStatus").textContent="Say or type something first."; return; }
+    const msg="Diary: "+words;
+    try{ await navigator.clipboard.writeText(msg); }catch{}
+    draft.value=""; draft.oninput();
+    $("#saveStatus").textContent="Opening Claude. If the text isn't filled in, paste it.";
+    location.href="https://claude.ai/new?q="+encodeURIComponent(msg);
+  };
 }
 
 /* ---------- sorting with Claude (keyword fallback) ---------- */
