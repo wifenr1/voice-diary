@@ -1,6 +1,6 @@
 # Setting up your Voice Diary, step by step
 
-Work through the sections in order. It takes about 20 minutes. Menu names below are from the current versions of each app and may differ slightly in yours.
+Work through the sections in order. If you already deployed the diary, start at step 4. Menu names below are from the current versions of each app and may differ slightly in yours.
 
 ---
 
@@ -58,36 +58,57 @@ Coolify gets the HTTPS certificate automatically. With the GitHub App connected,
 
 ---
 
-## 4. Claude Console: get your API key
+## 4. Coolify: turn on the Claude connector
 
-1. Go to **console.anthropic.com** (it may forward you to platform.claude.com) and sign up or log in.
-2. Open **Settings → Billing** and add credit, for example **$5**. This is separate from your Claude subscription.
-3. Open **API keys** and click **Create key**. Name it `Voice diary`, then **Create**.
-4. **Copy the key now.** It is only shown once. Don't paste it into a chat; you'll paste it into the app in step 5.
+1. Make up a **connector secret**: at least 32 letters and digits, with no spaces or symbols. For example, let your password manager generate one with symbols switched off.
+2. In Coolify, open the diary → **Environment Variables** → **+ Add**:
+   - **Name:** `MCP_TOKEN`
+   - **Value:** your connector secret
+3. Click **Save**, then **Redeploy**.
+
+Your connector address is now `https://diary.yourdomain.de/mcp/` followed by your secret, for example `https://diary.yourdomain.de/mcp/Xk29fLq…`. Treat that whole address like a password.
 
 ---
 
-## 5. iPhone: install the app and add your key
+## 5. Claude: add your diary connector
+
+Do this once, in a web browser. It then works in the Claude iPhone app too.
+
+1. Go to **claude.ai** and open **Settings → Connectors**.
+2. Click **Add custom connector**.
+3. **Name:** `Voice Diary`. **Remote MCP server URL:** your connector address from step 4.
+4. Click **Add**. Voice Diary now shows in your list of connectors.
+5. In a new chat, open the **tools menu** (the sliders or **+** button) and check that **Voice Diary** is switched on.
+
+---
+
+## 6. iPhone: install the diary app
 
 1. Open **Safari** (it must be Safari) and go to `https://diary.yourdomain.de`.
-2. Tap the **Share** button (the square with an arrow) at the bottom.
-3. Scroll down, tap **Add to Home Screen**, then **Add**.
-4. Close Safari and open **Diary** from your home screen.
-5. Tap **Week** at the bottom, scroll to **Backup & settings**, paste your key into **Your Claude API key**, and tap **Save**.
-6. Below it, type your `DIARY_PASSWORD` into **Diary password for your server** and tap **Save**. It should say **Saved on your server**.
-7. **Test it:** tap **Speak**, type "Today I went bouldering. Remind me to call Tom tomorrow at 6pm.", and tap **Save & sort into chapters**. It should land in Hobbies with a reminder below it. If it says "Sorted with simple rules", the key isn't working; check it in step 5.
-8. Tap **Add to Calendar** on the reminder. iPhone should show its "Add to Calendar" screen. Tell me if it doesn't.
+2. Tap the **Share** button (the square with an arrow), scroll down, tap **Add to Home Screen**, then **Add**.
+3. Open **Diary** from your home screen.
+4. Tap **Week**, scroll to **Backup & settings**, type your `DIARY_PASSWORD` into **Diary password for your server**, and tap **Save**. It should say **Saved on your server**.
 
-The first time you tap the microphone, allow microphone access.
+You don't need an API key. Leave that field empty.
 
 ---
 
-## 6. Move your entries over from the Claude version
+## 7. Try it
+
+1. In the **Claude app**, start a chat (or use voice mode) and say:
+   *"Diary: today I went bouldering with Tom. Remind me to book the dentist on Monday at 3pm."*
+2. Claude saves it and tells you which chapters it used. The first time, it asks to use Voice Diary: tap **Allow**.
+3. Open **Diary** on your home screen. You'll see today's page with the entry under **Hobbies** and the reminder below it.
+4. Tap **Add to Calendar** on the reminder. iPhone should show its "Add to Calendar" screen. Tell me if it doesn't.
+5. On Sunday, ask Claude: *"Write my weekly diary review."* It appears on the **Week** page.
+
+---
+
+## 8. Move your entries over from the Claude version
 
 1. In the Claude app, open your **Anna's Voice Diary** artifact.
 2. Tap **Week**, scroll to **Backup**, tap **Export my diary**, and confirm. Choose **Save to Files**.
 3. Open **Diary** from your home screen, tap **Week → Import a backup**, and pick that file from **Files**.
-4. Your days, chapters and reviews appear in the new app.
 
 ---
 
@@ -96,4 +117,5 @@ The first time you tap the microphone, allow microphone access.
 - **Your diary is on your phone and on your server.** Every change is saved to the server within a second. If you lose your phone, install the app on the new one, enter the same password, and everything comes back.
 - **The server keeps a daily copy** of the last 30 days in `/data/backups`, in case something goes wrong.
 - If you're offline, entries are kept on the phone and sent to the server when you're back online.
+- **No extra cost:** Claude sorts your entries and writes your review on your Claude subscription. You only need an API key if you want sorting inside the app itself.
 - You can switch the GitHub repository back to **private**. Coolify still reads it through its GitHub App.

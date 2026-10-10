@@ -5,7 +5,9 @@ A voice diary that writes down what you say, sorts it into your own chapters, tu
 The same page, `index.html`, runs in two places:
 
 - **Inside Claude**, as an artifact. Entries are stored privately in your Claude account.
-- **As its own iPhone app** on your home screen, served from your own server with Coolify. Your diary is kept on your phone and synced to your server behind a password. Your API key stays on your phone, and the app calls Claude directly.
+- **As its own iPhone app** on your home screen, served from your own server with Coolify. Your diary is kept on your phone and synced to your server behind a password.
+
+The server is also a **Claude connector** (MCP). You tell Claude about your day, Claude sorts it into your chapters and saves it to your server, and it shows up in the app. Claude also writes your weekly review there. It all runs on your Claude subscription, with no API key.
 
 ## Setting up the home-screen app
 
@@ -21,15 +23,14 @@ The full click-by-click guide is in [SETUP.md](SETUP.md). In short:
 
 The repository can stay private, since Coolify reads it through its GitHub App.
 
-### 2. Get a Claude API key
-1. Go to console.anthropic.com and sign up.
-2. Under **Billing**, add a small amount of credit, for example $5.
-3. Under **API keys**, choose **Create key** and copy it. Don't paste it into a chat.
+### 2. Connect Claude
+1. In Coolify, add the environment variable `MCP_TOKEN`, a long secret of letters and digits, and redeploy.
+2. On claude.ai, open **Settings → Connectors → Add custom connector**, name it `Voice Diary`, and use `https://diary.yourdomain.de/mcp/<MCP_TOKEN>` as the URL.
 
 ### 3. Add it to your home screen
 1. Open your diary address (for example `https://diary.yourdomain.de`) in **Safari** on your iPhone.
 2. Tap **Share → Add to Home Screen**.
-3. Open the diary from the new icon, go to **Week**, paste your API key and your diary password, and tap **Save** for each.
+3. Open the diary from the new icon, go to **Week**, enter your diary password, and tap **Save**.
 
 ### 4. Bring your entries over
 1. In the Claude version, open **Week → Export my diary**.
@@ -37,8 +38,8 @@ The repository can stay private, since Coolify reads it through its GitHub App.
 
 ## Good to know
 - **Backups:** your diary syncs to the server, which also keeps a daily copy of the last 30 days in `/data/backups`.
-- **Weekly review:** on Sundays the Speak page shows "Your weekly review is ready". Tap it to write the review.
-- **Cost:** the app uses the `claude-opus-5-5` model, and you pay per use. A few entries a day should cost a few dollars a month at most.
+- **Using it:** tell Claude "diary: …" to add an entry, and "write my weekly diary review" on Sundays.
+- **Cost:** none beyond your Claude subscription. An API key is optional; with one, the app can also sort and write reviews by itself (`claude-opus-5-5`, paid per use).
 - **Updates:** every change pushed to `main` is redeployed by Coolify.
 
 ## Files
@@ -48,5 +49,5 @@ The repository can stay private, since Coolify reads it through its GitHub App.
 | `index.html` | The whole app. It works inside Claude and as the home-screen app. |
 | `scripts/build.mjs` | Adds the home-screen app's head tags and writes `dist/`. |
 | `public/` | App icon, manifest and the offline helper (`sw.js`). |
-| `server.mjs` | Serves the app and stores your diary in `/data`, behind `DIARY_PASSWORD`. |
+| `server.mjs` | Serves the app, stores your diary in `/data` behind `DIARY_PASSWORD`, and is the Claude connector at `/mcp/<MCP_TOKEN>`. |
 | `Dockerfile` | Builds the app and runs the server. Coolify uses this. |

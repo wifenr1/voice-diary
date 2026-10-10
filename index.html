@@ -222,6 +222,7 @@ const views = {
       <div class="eyebrow">${esc(today)}</div>
       <h1>Tell me about today</h1>
       <p class="lede">Talk freely. I'll write it down and sort each part into its chapter.</p>
+      ${HOSTED && !getKey() ? `<div class="banner"><span>For smart sorting, tell Claude <b>"diary: …"</b> instead, and it lands here. Anything saved below is sorted with simple rules.</span></div>` : ""}
       <div class="recorder">
         <button class="mic" id="mic" aria-label="Start speaking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
         <div class="mic-label" id="micLabel">Tap to speak</div>
@@ -242,7 +243,7 @@ const views = {
       ${days.map(d=>`<article class="day" id="day-${d.date}">
         <div class="day-head"><div class="day-date">${esc(short(d.date))}<small>${esc(pretty(d.date))}</small></div>
         ${d.sessions[0].example?'<span class="tag-ex">Example</span>':""}</div>
-        ${d.sessions.map(e=>`<div class="session-time">Spoken at ${esc(e.time)}</div>${e.items.map(it=>itemHTML(it,e,it._i)).join("")}${remindersHTML(e.reminders)}`).join("")}
+        ${d.sessions.map(e=>`<div class="session-time">${e.source==="claude"?"Told to Claude":"Spoken"} at ${esc(e.time)}</div>${e.items.map(it=>itemHTML(it,e,it._i)).join("")}${remindersHTML(e.reminders)}`).join("")}
       </article>`).join("")}</main>`;
   },
   chapters(){
@@ -264,7 +265,8 @@ const views = {
     return band(true) + `<main class="wrap"><div class="eyebrow">Week of ${esc(short(from))}</div><h1>Weekly review</h1>
       <p class="lede">What you added this week, and a few challenges to grow from it.</p>
       ${exampleBanner()}
-      <div class="row"><button class="btn" id="review" ${items.length?"":"disabled"}>${rv?"Write it again":"Write my weekly review"}</button>
+      ${HOSTED && !getKey() ? `<div class="banner"><span>Ask Claude <b>"write my weekly diary review"</b>, and it appears here.</span></div>` : ""}
+      <div class="row" ${HOSTED && !getKey() ? "hidden" : ""}><button class="btn" id="review" ${items.length?"":"disabled"}>${rv?"Write it again":"Write my weekly review"}</button>
       <span class="status" id="reviewStatus">${items.length} new point${items.length===1?"":"s"} this week</span></div>
       <div id="reviewOut">${rv?reviewHTML(rv):""}</div>
       ${settingsHTML()}</main>`;
@@ -475,7 +477,7 @@ async function saveEntry(){
   try{ ({items, reminders} = await sortWithClaude(text)); }
   catch(e){ ({items, reminders} = fallbackSort(text));
     st.textContent = e.code==="not_granted" ? "Sorted with simple rules, since Claude wasn't allowed. You can change any chapter on the Days page."
-      : e.code==="no_key" ? "Sorted with simple rules. Add your Claude API key on the Week page so Claude can sort for you."
+      : e.code==="no_key" ? "Saved with simple sorting. For smart sorting, tell Claude \"diary: …\" instead."
       : e.code==="bad_key" ? "Sorted with simple rules, because Claude didn't accept your API key. Check it on the Week page."
       : "Sorted with simple rules. You can change any chapter on the Days page."; }
   const now = new Date();
@@ -499,7 +501,7 @@ Reply with only JSON: {"buckets":[{"bucket":"${BUCKETS[0].k}","summary":"...","c
 ${list}`;
   try{
     const rv = await S.sample.json(prompt,{modelTier:"default"});
-    S.reviews[from]=rv; await persistReview(from,rv); render();
+    rv.at=Date.now(); S.reviews[from]=rv; await persistReview(from,rv); render();
   }catch(e){ btn.disabled=false; st.textContent = e.code==="not_granted" ? "Claude wasn't allowed, so there's no review this time." : e.code==="no_key" ? "Add your Claude API key below first." : e.code==="bad_key" ? "Claude didn't accept your API key. Check it below." : e.code==="rate_limited" ? "Too many requests just now. Try again in a minute." : "The review didn't come through. Try again."; }
 }
 
@@ -509,9 +511,9 @@ function settingsHTML(){
     <p class="status">Save a copy of your whole diary, or bring one in from another device.</p>
     <div class="row"><button class="btn ghost sm" id="exportBtn">Export my diary</button>
       <label class="btn ghost sm" for="importFile">Import a backup</label><input type="file" id="importFile" accept=".json,application/json" hidden></div>
-    ${HOSTED?`<div class="set-row"><label for="apikey">Your Claude API key</label>
+    ${HOSTED?`<div class="set-row"><label for="apikey">Claude API key (optional)</label>
       <div class="row"><input id="apikey" type="password" autocomplete="off" value="${esc(getKey())}" placeholder="sk-ant-…"><button class="btn ghost sm" id="keySave">Save</button></div>
-      <span class="status" style="font-weight:400">It stays on this phone and is only sent to Claude.</span></div>
+      <span class="status" style="font-weight:400">Only needed to sort inside this app. Without it, talk to Claude with the diary connector instead.</span></div>
       <div class="set-row"><label for="syncpass">Diary password for your server</label>
       <div class="row"><input id="syncpass" type="password" autocomplete="current-password" value="${esc(getSyncPass())}" placeholder="The DIARY_PASSWORD you set in Coolify"><button class="btn ghost sm" id="syncSave">Save</button></div>
       <span class="status" style="font-weight:400" id="syncState">${esc(S.syncState||(getSyncPass()?"":"Not saving to your server yet."))}</span></div>`:""}
@@ -627,7 +629,7 @@ async function syncNow(){
   }
   S.entries = [...byId.values()].sort((a,b)=>a.createdAt-b.createdAt);
   store.set(S.entries);
-  for (const w in (srv.reviews||{})) if (!S.reviews[w]){ S.reviews[w]=srv.reviews[w]; pulled++; }
+  for (const w in (srv.reviews||{})) if (!S.reviews[w] || (srv.reviews[w]?.at||0) > (S.reviews[w]?.at||0)){ S.reviews[w]=srv.reviews[w]; pulled++; }
   try{ localStorage.setItem("diary.reviews",JSON.stringify(S.reviews)); }catch{}
   if (Array.isArray(srv.chapters) && srv.chapters.length && (srv.chaptersAt||0) > chaptersAt()){
     setBuckets(srv.chapters); pulled++;
