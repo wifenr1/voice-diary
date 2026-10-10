@@ -27,6 +27,9 @@ The repository can stay private, since Coolify reads it through its GitHub App.
 1. In Coolify, add the environment variable `MCP_TOKEN`, a long secret of letters and digits, and redeploy.
 2. On claude.ai, open **Settings → Connectors → Add custom connector**, name it `Voice Diary`, and use `https://diary.yourdomain.de/mcp/<MCP_TOKEN>` as the URL.
 
+### Other people
+Set `INVITE_CODE` in Coolify and share it. Each person creates their own account with their chapters and gets their own private diary and Claude connector. See step 9 in [SETUP.md](SETUP.md).
+
 ### 3. Add it to your home screen
 1. Open your diary address (for example `https://diary.yourdomain.de`) in **Safari** on your iPhone.
 2. Tap **Share → Add to Home Screen**.
@@ -49,5 +52,5 @@ The repository can stay private, since Coolify reads it through its GitHub App.
 | `index.html` | The whole app. It works inside Claude and as the home-screen app. |
 | `scripts/build.mjs` | Adds the home-screen app's head tags and writes `dist/`. |
 | `public/` | App icon, manifest and the offline helper (`sw.js`). |
-| `server.mjs` | Serves the app, stores your diary in `/data` behind `DIARY_PASSWORD`, and is the Claude connector at `/mcp/<MCP_TOKEN>`. |
+| `server.mjs` | Serves the app, stores each person's diary in `/data` behind their password, and is each person's Claude connector at `/mcp/<secret>`. |
 | `Dockerfile` | Builds the app and runs the server. Coolify uses this. |

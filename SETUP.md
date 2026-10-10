@@ -112,6 +112,26 @@ You don't need an API key. Leave that field empty.
 
 ---
 
+## 9. Invite someone else
+
+Other people can have their own private diary on your server. They can't see yours, and you can't see theirs.
+
+1. In Coolify, open the diary → **Environment Variables** → **+ Add** (in the top section, not under Preview Deployments):
+   - **Name:** `INVITE_CODE`
+   - **Value:** a code you make up, for example `tulip-river-42`
+2. Click **Save**, then **Redeploy**.
+3. Send them your diary address (`https://diary.tom-schliemann.de`) and the invite code.
+4. They open it in Safari, add it to their home screen, and tap **Create your diary**. The app then:
+   - explains how the diary works,
+   - asks which chapters they want,
+   - and shows their **personal connector address** with the steps to add it in their own Claude.
+
+They use their own Claude account, so it costs you nothing. To stop new sign-ups, delete `INVITE_CODE` and redeploy. People who already joined keep their diary.
+
+**You** don't need to change anything: your phone keeps working as it is. If you ever sign in again, your username is `anna` and your password is your `DIARY_PASSWORD`.
+
+---
+
 ## Good to know
 
 - **Your diary is on your phone and on your server.** Every change is saved to the server within a second. If you lose your phone, install the app on the new one, enter the same password, and everything comes back.

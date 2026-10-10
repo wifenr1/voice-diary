@@ -140,6 +140,25 @@ nav.tabs button{flex:1;max-width:130px;border:0;background:transparent;padding:8
 nav.tabs button svg{width:22px;height:22px}
 nav.tabs button[aria-current="page"]{color:var(--ink);background:var(--soft)}
 .del-btn{margin-left:8px;border:0;background:none;padding:0;font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted, #888);text-decoration:underline;cursor:pointer}
+.auth-form{display:grid;gap:14px;max-width:420px;margin-top:8px}
+.auth-form label{display:grid;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
+.auth-form input,.add-pick input,input.mono{border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);padding:11px 12px;font:inherit;font-size:16px}
+.auth-form small,.card-step small{font-weight:400;color:var(--muted);font-size:12px}
+.auth-form .btn{justify-self:start}
+.auth-switch{margin-top:22px;color:var(--muted);font-size:14px}
+.link{border:0;background:none;padding:0;font:inherit;color:var(--ink);font-weight:600;text-decoration:underline;cursor:pointer}
+.steps{display:flex;gap:6px;margin-bottom:14px}.steps span{width:28px;height:4px;border-radius:4px;background:var(--line)}.steps span.on{background:var(--ink)}
+.how{padding-left:20px;display:grid;gap:10px;margin:8px 0 22px;font-size:15px;line-height:1.45}
+.how b{color:var(--ink)}
+.h-sm{font-size:17px;margin:8px 0 0}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:6px 0 12px}
+.pick{text-align:left;border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:14px;padding:12px;cursor:pointer;display:grid;gap:3px;font:inherit}
+.pick small{color:var(--muted);font-size:12px}
+.pick.on{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink);background:var(--soft)}
+.pick.on b::before{content:"✓ "}
+.add-pick{margin-bottom:22px}.add-pick input{flex:1;min-width:0}
+.card-step{display:grid;gap:8px;background:var(--soft);border-radius:14px;padding:14px;margin:4px 0 16px}
+input.mono{flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace;font-size:13px;font-weight:400;padding:8px 10px}
 .del-ask{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px;font-size:14px}
 </style>
 
@@ -161,9 +180,19 @@ const DEFAULT_BUCKETS = [
   {k:"future", name:"Future",                c:"--b-future", hint:"goals, plans and wishes"},
   {k:"berlin", name:"Berlin",                c:"--b-berlin", hint:"the city, places and life there"},
 ];
+// Starting chapters for everyone else (the server uses the same ones).
+const GENERIC_BUCKETS = [
+  {k:"learn",  name:"Work learnings",   c:"--b-learn",  hint:"lessons and insights from work"},
+  {k:"exp",    name:"Work experiences", c:"--b-exp",    hint:"things that happened at work"},
+  {k:"people", name:"People I love",    c:"--b-tom",    hint:"partner, family and friends"},
+  {k:"hobby",  name:"Hobbies",          c:"--b-hobby",  hint:"sport, making things, free time"},
+  {k:"future", name:"Future",           c:"--b-future", hint:"goals, plans and wishes"},
+];
+const getMe = ()=>{ try{return JSON.parse(localStorage.getItem("diary.me")||"null")}catch{return null} };
+const defaultBuckets = ()=>{ const me=getMe(); return me && !me.owner ? GENERIC_BUCKETS : DEFAULT_BUCKETS; };
 let BUCKETS = DEFAULT_BUCKETS, B = {};
 function setBuckets(list){
-  BUCKETS = (Array.isArray(list) && list.length ? list : DEFAULT_BUCKETS)
+  BUCKETS = (Array.isArray(list) && list.length ? list : defaultBuckets())
     .filter(b=>b && b.k && b.name).map(b=>({k:String(b.k),name:String(b.name),c:COLOURS.includes(b.c)?b.c:COLOURS[0],hint:String(b.hint||"")}));
   B = Object.fromEntries(BUCKETS.map(b=>[b.k,b]));
 }
@@ -210,17 +239,9 @@ function byDay(){
 function band(small){ return `<div class="band${small?" small":""}" aria-hidden="true"></div>`; }
 function exampleBanner(){
   if (alive().length) return "";
-  if (HOSTED && !getSyncPass()) return `<div class="banner" style="flex-wrap:wrap"><span>Already have a diary? Enter your diary password to load it from your server.</span>
-    <div class="row" style="width:100%"><input id="connectPass" type="password" autocomplete="current-password" placeholder="Diary password"><button class="btn sm" id="connectSave">Load my diary</button></div>
-    <span class="status" style="font-weight:400" id="connectState">${esc(S.syncState)}</span></div>`;
   return `<div class="banner"><span class="tag-ex">Example</span><span>These pages show how your diary will look. They disappear when you save your first entry.</span></div>`;
 }
-document.addEventListener("click", ev=>{
-  if (ev.target.id!=="connectSave") return;
-  const v=($("#connectPass")||{}).value||""; if (!v) return;
-  try{localStorage.setItem("diary.syncpass",v)}catch{}
-  setSyncState("Connecting…"); syncNow();
-});
+
 function itemHTML(it, e, idx){
   const k = eff(it), b = B[k];
   const opts = BUCKETS.map(x=>`<option value="${x.k}"${x.k===k?" selected":""}>${esc(x.name)}</option>`).join("");
@@ -394,6 +415,10 @@ function reviewHTML(rv){
 
 /* ---------- render + nav ---------- */
 function render(keepScroll){
+  const gate = HOSTED && !getSyncPass() ? "auth" : HOSTED && getOnboard() ? "welcome" : "";
+  $("nav.tabs").hidden = Boolean(gate);
+  if (HOSTED){ const me=getMe(); document.title = getSession() && me ? me.name+"'s Voice Diary" : getSyncPass() ? "Anna's Voice Diary" : "Voice Diary"; }
+  if (gate){ $("#app").innerHTML = gate==="auth" ? authHTML() : welcomeHTML(); if (gate==="auth") wireAuth(); else wireWelcome(); if (!keepScroll) window.scrollTo(0,0); return; }
   $("#app").innerHTML = views[S.tab]();
   document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-current", b.dataset.tab===S.tab?"page":"false"));
   if (S.tab==="speak") wireSpeak();
@@ -550,9 +575,9 @@ function settingsHTML(){
     ${HOSTED?`<div class="set-row"><label for="apikey">Claude API key (optional)</label>
       <div class="row"><input id="apikey" type="password" autocomplete="off" value="${esc(getKey())}" placeholder="sk-ant-…"><button class="btn ghost sm" id="keySave">Save</button></div>
       <span class="status" style="font-weight:400">Only needed to sort inside this app. Without it, talk to Claude with the diary connector instead.</span></div>
-      <div class="set-row"><label for="syncpass">Diary password for your server</label>
+      ${getSession() ? accountHTML() : `<div class="set-row"><label for="syncpass">Diary password for your server</label>
       <div class="row"><input id="syncpass" type="password" autocomplete="current-password" value="${esc(getSyncPass())}" placeholder="The DIARY_PASSWORD you set in Coolify"><button class="btn ghost sm" id="syncSave">Save</button></div>
-      <span class="status" style="font-weight:400" id="syncState">${esc(S.syncState||(getSyncPass()?"":"Not saving to your server yet."))}</span></div>`:""}
+      <span class="status" style="font-weight:400" id="syncState">${esc(S.syncState||(getSyncPass()?"":"Not saving to your server yet."))}</span></div>`}`:""}
     <div class="status" id="setStatus"></div></section>`;
 }
 const getKey = ()=>{ try{return localStorage.getItem("diary.apikey")||""}catch{return ""} };
@@ -579,7 +604,8 @@ function wireSettings(){
   };
   if (!HOSTED) return;
   $("#keySave").onclick=()=>{ try{localStorage.setItem("diary.apikey",$("#apikey").value.trim())}catch{} st.textContent="Key saved."; };
-  $("#syncSave").onclick=()=>{ try{localStorage.setItem("diary.syncpass",$("#syncpass").value)}catch{} setSyncState("Connecting…"); syncNow(); };
+  wireAccount();
+  if ($("#syncSave")) $("#syncSave").onclick=()=>{ try{localStorage.setItem("diary.syncpass",$("#syncpass").value)}catch{} setSyncState("Connecting…"); syncNow(); };
 }
 
 /* Claude for the home-screen app: called straight from the phone with Anna's own key */
@@ -641,18 +667,21 @@ async function persistReview(from,rv){
 }
 
 /* ---------- home-screen app: keep a copy on Anna's own server ---------- */
-const getSyncPass = ()=>{ try{return localStorage.getItem("diary.syncpass")||""}catch{return ""} };
+const getSession = ()=>{ try{return localStorage.getItem("diary.session")||""}catch{return ""} };
+const getSyncPass = ()=>{ try{return getSession() || localStorage.getItem("diary.syncpass")||""}catch{return ""} };
 const chaptersAt = ()=>{ try{return +localStorage.getItem("diary.chaptersAt")||0}catch{return 0} };
 function markChapters(){ try{ localStorage.setItem("diary.chaptersAt",String(Date.now())); }catch{} queueSync(); }
 let syncTimer=null;
 function queueSync(){ if (!HOSTED || !getSyncPass()) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow,1000); }
-function setSyncState(text){ S.syncState=text; for (const id of ["#syncState","#connectState"]){ const el=$(id); if (el) el.textContent=text; } }
+function setSyncState(text){ S.syncState=text; const el=$("#syncState"); if (el) el.textContent=text; }
 async function syncNow(){
   const pw=getSyncPass(); if (!HOSTED || !pw) return;
   const auth={authorization:"Bearer "+pw};
   let r;
   try{ r=await fetch("api/diary",{headers:auth,cache:"no-store"}); }catch{ setSyncState("Offline. Your changes are saved on this phone and will sync later."); return; }
-  if (r.status===401){ setSyncState("The server didn't accept that password."); if (!alive().length){ try{localStorage.removeItem("diary.syncpass")}catch{} render(true); } return; }
+  if (r.status===401){
+    if (getSession()){ try{ localStorage.removeItem("diary.session"); }catch{} S.authMsg="Please sign in again."; render(); return; }
+    setSyncState("The server didn't accept that password."); if (!alive().length){ try{localStorage.removeItem("diary.syncpass")}catch{} render(true); } return; }
   if (r.status===429){ setSyncState("Too many wrong passwords. Try again in 15 minutes."); return; }
   if (!r.ok){ setSyncState("Saving to your server isn't set up yet."); return; }
   const srv = await r.json();
@@ -680,6 +709,145 @@ async function syncNow(){
   if (pulled && S.tab!=="speak" && !S.editing) render(true);
 }
 
+/* ---------- accounts: sign in, sign up, and the welcome guide ---------- */
+const LOCAL_KEYS = ["diary.entries","diary.reviews","diary.chapters","diary.chaptersAt","diary.session","diary.me","diary.syncpass","diary.draft","diary.onboard","diary.tab"];
+const getOnboard = ()=>{ try{return +localStorage.getItem("diary.onboard")||0}catch{return 0} };
+const setOnboard = n=>{ try{ n ? localStorage.setItem("diary.onboard",String(n)) : localStorage.removeItem("diary.onboard"); }catch{} };
+const connectorURL = ()=>{ const me=getMe(); return me && me.connector ? location.origin + me.connector : ""; };
+S.authMode = "signin"; S.authMsg = "";
+
+function authHTML(){
+  const up = S.authMode==="signup";
+  return band() + `<main class="wrap auth"><div class="eyebrow">Voice Diary</div>
+    <h1>${up?"Start your diary":"Welcome back"}</h1>
+    <p class="lede">${up?"Speak about your day, and your diary sorts it into chapters and coaches you every week.":"Sign in to open your diary."}</p>
+    <form id="authForm" class="auth-form" autocomplete="on">
+      ${up?`<label>Your first name<input name="name" autocomplete="given-name" required maxlength="40"></label>`:""}
+      <label>Username<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{1,29}" title="2 to 30 letters, digits, - or _"></label>
+      <label>Password<input name="password" type="password" autocomplete="${up?"new-password":"current-password"}" required ${up?'minlength="8"':""}></label>
+      ${up?`<label>Invite code<input name="invite" autocapitalize="none" spellcheck="false" required><small>Ask the person who invited you.</small></label>`:""}
+      <button class="btn" type="submit">${up?"Create my diary":"Sign in"}</button>
+      <p class="status" id="authMsg" role="status">${esc(S.authMsg)}</p>
+    </form>
+    <p class="auth-switch">${up?`Already have a diary? <button class="link" data-auth="signin">Sign in</button>`:`New here? <button class="link" data-auth="signup">Create your diary</button>`}</p></main>`;
+}
+function wireAuth(){
+  document.querySelectorAll("[data-auth]").forEach(b=>b.onclick=()=>{ S.authMode=b.dataset.auth; S.authMsg=""; render(); });
+  $("#authForm").onsubmit = async ev=>{
+    ev.preventDefault();
+    const f=Object.fromEntries(new FormData(ev.target)), up=S.authMode==="signup", msg=$("#authMsg"), btn=ev.target.querySelector("button[type=submit]");
+    btn.disabled=true; msg.textContent = up ? "Creating your diary…" : "Signing in…";
+    let r, out={};
+    try{ r=await fetch(up?"api/signup":"api/login",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(f)}); out=await r.json().catch(()=>({})); }
+    catch{ btn.disabled=false; msg.textContent="You seem to be offline. Try again when you're connected."; return; }
+    if (!r.ok){
+      btn.disabled=false;
+      msg.textContent = r.status===429 ? "Too many wrong tries. Wait 15 minutes, then try again."
+        : ({wrong_invite:"That invite code isn't right.",signups_off:"New diaries can't be created on this server yet.",bad_username:"Pick another username: 2 to 30 letters or digits.",short_password:"Use a password with at least 8 characters.",taken:"That username is taken. Pick another one."})[out.error]
+        || (up ? "That didn't work. Try again." : "Wrong username or password.");
+      return;
+    }
+    // a fresh start on this phone: nothing from a previous person stays behind
+    for (const k of LOCAL_KEYS) try{ localStorage.removeItem(k); }catch{}
+    try{ localStorage.setItem("diary.session",out.token); localStorage.setItem("diary.me",JSON.stringify(out.me)); }catch{}
+    S.entries=[]; S.reviews={}; S.tab="speak"; S.authMsg=""; setBuckets(null);
+    if (up) setOnboard(1);
+    render(); syncNow();
+  };
+}
+
+// chapter ideas for the welcome guide
+const IDEAS = [
+  {k:"learn",name:"Work learnings",hint:"lessons and insights from work",on:true},
+  {k:"exp",name:"Work experiences",hint:"things that happened at work",on:true},
+  {k:"partner",name:"Life with my partner",hint:"my relationship and our time together"},
+  {k:"family",name:"Family",hint:"parents, siblings, children"},
+  {k:"friends",name:"Friends",hint:"time with friends"},
+  {k:"hobby",name:"Hobbies",hint:"sport, making things, free time",on:true},
+  {k:"health",name:"Health & sport",hint:"body, mind, sleep and training"},
+  {k:"future",name:"Future",hint:"goals, plans and wishes",on:true},
+  {k:"city",name:"My city",hint:"the city, places and life there"},
+  {k:"travel",name:"Travel",hint:"trips and places I visit"},
+];
+S.pick = null;
+function welcomeHTML(){
+  const step=getOnboard(), me=getMe()||{}, dots=[1,2,3].map(n=>`<span class="${n===step?"on":""}"></span>`).join("");
+  if (step===1) return band() + `<main class="wrap welcome"><div class="steps" aria-label="Step 1 of 3">${dots}</div>
+    <div class="eyebrow">Welcome${me.name?", "+esc(me.name):""}</div><h1>How your diary works</h1>
+    <ol class="how">
+      <li><b>Speak about your day.</b> Talk freely, about anything. Your diary writes it down.</li>
+      <li><b>It's sorted into chapters.</b> Each story goes into one chapter, like Work learnings or Hobbies. You pick your chapters next, and you can change them any time.</li>
+      <li><b>Every day gets a page.</b> The Days tab shows each day you spoke. In Chapters, every point has a date you can tap to open the full day.</li>
+      <li><b>Say "remind me to…"</b> and it becomes a reminder you can add to your calendar.</li>
+      <li><b>Every Sunday, a weekly review.</b> A short summary per chapter, plus a few challenges to grow from: think ahead, do this again, or train this.</li>
+    </ol>
+    <div class="row"><button class="btn" data-step="2">Choose my chapters</button></div></main>`;
+  if (step===2){
+    if (!S.pick) S.pick = IDEAS.map(x=>({...x}));
+    return band() + `<main class="wrap welcome"><div class="steps" aria-label="Step 2 of 3">${dots}</div>
+      <div class="eyebrow">Your chapters</div><h1>What do you want to write about?</h1>
+      <p class="lede">Pick the chapters for your diary. Every story you tell goes into one of them.</p>
+      <div class="picks">${S.pick.map((x,i)=>`<button class="pick${x.on?" on":""}" data-pick="${i}" aria-pressed="${!!x.on}"><b>${esc(x.name)}</b><small>${esc(x.hint)}</small></button>`).join("")}</div>
+      <form id="addPick" class="row add-pick"><input id="pickName" placeholder="Add your own, for example Garden" maxlength="40" aria-label="Your own chapter"><button class="btn ghost sm" type="submit">Add</button></form>
+      <div class="row"><button class="btn" id="pickSave">Continue</button><button class="btn ghost" data-step="1">Back</button><span class="status" id="pickMsg"></span></div></main>`;
+  }
+  const url=connectorURL();
+  return band() + `<main class="wrap welcome"><div class="steps" aria-label="Step 3 of 3">${dots}</div>
+    <div class="eyebrow">Connect Claude</div><h1>Let Claude write your diary</h1>
+    <p class="lede">Claude tidies what you say, sorts it into your chapters and writes your weekly review. It uses your own Claude account, so connect it once.</p>
+    <div class="card-step"><b>Your personal connector address</b>
+      <div class="row"><input readonly value="${esc(url)}" aria-label="Connector address" class="mono"><button class="btn ghost sm" data-copy="${esc(url)}">Copy</button></div>
+      <small>Keep it private: anyone with this address can read and add to your diary.</small></div>
+    <ol class="how">
+      <li>On <b>claude.ai</b>, open <b>Settings → Connectors</b> and tap <b>Add custom connector</b>.</li>
+      <li>Name it <b>Voice Diary</b>, paste the address above, and tap <b>Add</b>.</li>
+      <li>In a new chat, open the <b>+</b> menu and check that <b>Voice Diary</b> is on. It then works in the Claude app on your phone too.</li>
+    </ol>
+    <h2 class="h-sm">Then, every day</h2>
+    <ul class="how">
+      <li>Tell Claude <b>"Diary: …"</b> and talk about your day, in a chat or with voice mode. It shows up here.</li>
+      <li>Or speak in this app and tap <b>Send to Claude</b>.</li>
+      <li>Saved something here without Claude? Say <b>"tidy my diary"</b> and Claude cleans it up.</li>
+      <li>On Sundays, say <b>"Write my weekly diary review"</b>. Your summary and challenges appear on the Week tab.</li>
+    </ul>
+    <div class="row"><button class="btn" id="welcomeDone">Start my diary</button><button class="btn ghost" data-step="2">Back</button></div></main>`;
+}
+function wireWelcome(){
+  document.querySelectorAll("[data-step]").forEach(b=>b.onclick=()=>{ setOnboard(+b.dataset.step); render(); });
+  document.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ const x=S.pick[+b.dataset.pick]; x.on=!x.on; render(true); });
+  const add=$("#addPick"); if (add) add.onsubmit=ev=>{ ev.preventDefault(); const n=$("#pickName").value.trim(); if (!n) return;
+    S.pick.push({k:"c"+Date.now().toString(36),name:n,hint:"",on:true}); render(true); };
+  const save=$("#pickSave"); if (save) save.onclick=()=>{
+    const list=S.pick.filter(x=>x.on).map((x,i)=>({k:x.k,name:x.name,hint:x.hint,c:COLOURS[i%COLOURS.length]}));
+    if (!list.length){ $("#pickMsg").textContent="Pick at least one chapter."; return; }
+    setBuckets(list); try{ localStorage.setItem("diary.chapters",JSON.stringify(BUCKETS)); }catch{}
+    markChapters(); S.pick=null; setOnboard(3); render(); };
+  const done=$("#welcomeDone"); if (done) done.onclick=()=>{ setOnboard(0); go("speak"); };
+}
+
+function accountHTML(){
+  const me=getMe()||{}, url=connectorURL();
+  return `<div class="set-row"><span>Signed in as ${esc(me.name||me.username||"")}${me.username&&me.name!==me.username?` (${esc(me.username)})`:""}</span>
+      <span class="status" style="font-weight:400" id="syncState">${esc(S.syncState)}</span></div>
+    ${url?`<div class="set-row"><label>Your Claude connector address</label>
+      <div class="row"><input readonly value="${esc(url)}" class="mono" aria-label="Connector address"><button class="btn ghost sm" data-copy="${esc(url)}">Copy</button></div>
+      <span class="status" style="font-weight:400">Keep it private. <button class="link" id="howConnect">How to connect Claude</button></span></div>`:""}
+    <div class="row"><button class="btn ghost sm" id="signOut">Sign out</button></div>`;
+}
+function wireAccount(){
+  const how=$("#howConnect"); if (how) how.onclick=()=>{ setOnboard(3); render(); };
+  const out=$("#signOut"); if (!out) return;
+  out.onclick=async()=>{
+    try{ await fetch("api/logout",{method:"POST",headers:{authorization:"Bearer "+getSession()}}); }catch{}
+    for (const k of LOCAL_KEYS) try{ localStorage.removeItem(k); }catch{}
+    location.reload();
+  };
+}
+async function refreshMe(){
+  if (!getSession()) return;
+  try{ const r=await fetch("api/me",{headers:{authorization:"Bearer "+getSession()},cache:"no-store"}); if (r.ok) localStorage.setItem("diary.me",JSON.stringify(await r.json())); }catch{}
+}
+
 try{ const t=localStorage.getItem("diary.tab"); if (views[t]) S.tab=t; }catch{}
 S.entries = store.get();
 try{ S.reviews = JSON.parse(localStorage.getItem("diary.reviews")||"{}"); }catch{}
@@ -690,7 +858,7 @@ if (HOSTED){
   if (location.hash==="#week") S.tab="week";
 }
 render();
-if (HOSTED){ syncNow(); addEventListener("online",syncNow); document.addEventListener("visibilitychange",()=>{ if (document.visibilityState==="visible") syncNow(); }); }
+if (HOSTED){ refreshMe(); syncNow(); addEventListener("online",syncNow); document.addEventListener("visibilitychange",()=>{ if (document.visibilityState==="visible") syncNow(); }); }
 
 (async()=>{
   const c = window.claude; if (!c?.use) return;
