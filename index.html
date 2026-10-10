@@ -139,6 +139,8 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--paper);border-t
 nav.tabs button{flex:1;max-width:130px;border:0;background:transparent;padding:8px 4px;border-radius:12px;cursor:pointer;color:var(--muted);font-size:12px;font-weight:600;display:grid;justify-items:center;gap:3px}
 nav.tabs button svg{width:22px;height:22px}
 nav.tabs button[aria-current="page"]{color:var(--ink);background:var(--soft)}
+.del-btn{margin-left:8px;border:0;background:none;padding:0;font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted, #888);text-decoration:underline;cursor:pointer}
+.del-ask{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px;font-size:14px}
 </style>
 
 <div id="app"></div>
@@ -194,7 +196,9 @@ const store = { get(){try{return JSON.parse(localStorage.getItem("diary.entries"
 
 // a point that is only a chapter name (e.g. a pasted heading) is not a diary point
 const isHeading = t=>BUCKETS.some(b=>b.name.toLowerCase()===String(t).replace(/[*#:_]/g,"").trim().toLowerCase());
-function visible(){ return (S.entries.length ? S.entries : EXAMPLES).map(e=>({...e,items:e.items.map((it,i)=>({...it,_i:i})).filter(it=>!isHeading(it.t))})); }
+// Deleted entries stay as a marker so the deletion syncs to the server and other phones.
+const alive = ()=>S.entries.filter(e=>!e.deleted);
+function visible(){ return (alive().length ? alive() : EXAMPLES).map(e=>({...e,items:e.items.map((it,i)=>({...it,_i:i})).filter(it=>!isHeading(it.t))})); }
 function byDay(){
   const m = {};
   for (const e of visible()) (m[e.date] ||= []).push(e);
@@ -205,7 +209,7 @@ function byDay(){
 /* ---------- views ---------- */
 function band(small){ return `<div class="band${small?" small":""}" aria-hidden="true"></div>`; }
 function exampleBanner(){
-  if (S.entries.length) return "";
+  if (alive().length) return "";
   if (HOSTED && !getSyncPass()) return `<div class="banner" style="flex-wrap:wrap"><span>Already have a diary? Enter your diary password to load it from your server.</span>
     <div class="row" style="width:100%"><input id="connectPass" type="password" autocomplete="current-password" placeholder="Diary password"><button class="btn sm" id="connectSave">Load my diary</button></div>
     <span class="status" style="font-weight:400" id="connectState">${esc(S.syncState)}</span></div>`;
@@ -244,7 +248,7 @@ const views = {
   },
   _nudge(){
     const d=new Date().getDay(), from=weekStart();
-    if (!HOSTED || d!==0 || S.reviews[from] || !S.entries.some(e=>e.date>=from)) return "";
+    if (!HOSTED || d!==0 || S.reviews[from] || !alive().some(e=>e.date>=from)) return "";
     return `<button class="banner nudge" data-goweek><b>Your weekly review is ready.</b> <span>Tap to see this week's summary and challenges.</span></button>`;
   },
   days(){
@@ -254,7 +258,7 @@ const views = {
       ${days.map(d=>`<article class="day" id="day-${d.date}">
         <div class="day-head"><div class="day-date">${esc(short(d.date))}<small>${esc(pretty(d.date))}</small></div>
         ${d.sessions[0].example?'<span class="tag-ex">Example</span>':""}</div>
-        ${d.sessions.map(e=>`<div class="session-time">${e.source==="claude"?"Told to Claude":"Spoken"} at ${esc(e.time)}</div>${e.items.map(it=>itemHTML(it,e,it._i)).join("")}${remindersHTML(e.reminders)}`).join("")}
+        ${d.sessions.map(e=>`<div class="session-time">${e.source==="claude"?"Told to Claude":"Spoken"} at ${esc(e.time)}${e.example?"":` <button class="del-btn" data-del="${esc(e.id)}" aria-label="Delete this entry">Delete</button>`}</div>${S.confirmDel===e.id?`<div class="del-ask"><span>Delete this entry? This can't be undone.</span><button class="btn sm" data-del-yes="${esc(e.id)}">Delete</button><button class="btn ghost sm" data-del-no>Cancel</button></div>`:""}${e.items.map(it=>itemHTML(it,e,it._i)).join("")}${remindersHTML(e.reminders)}`).join("")}
       </article>`).join("")}</main>`;
   },
   chapters(){
@@ -306,7 +310,7 @@ function remindersHTML(list){
 }
 function upcomingHTML(){
   const today=iso(new Date());
-  const ups = S.entries.flatMap(e=>e.reminders||[]).filter(r=>r.date>=today).sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+  const ups = alive().flatMap(e=>e.reminders||[]).filter(r=>r.date>=today).sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
   return `<h2 class="up-head">Reminders</h2>${ups.length?remindersHTML(ups):`<div class="empty">Say "remind me of…" and it will show up here, ready to add to your calendar.</div>`}`;
 }
 function parseWhen(s){
@@ -353,7 +357,7 @@ function wireEditor(){
     if (t.dataset.edColour){ const b=S.editing.find(x=>x.k===t.dataset.edColour); b.c=COLOURS[(COLOURS.indexOf(b.c)+1)%COLOURS.length]; render(true); }
     else if (t.dataset.edRemove){ const k=t.dataset.edRemove;
       const used = visible().some(en=>en.items.some(it=>eff(it)===k || S.moves[it.b]===k));
-      if (used && S.entries.length){ S.removing=k; render(true); }
+      if (used && alive().length){ S.removing=k; render(true); }
       else { S.editing=S.editing.filter(x=>x.k!==k); render(true); } }
     else if (t.dataset.edConfirm){ const k=t.dataset.edConfirm, to=$("#mv-"+k).value;
       S.moves[k]=to; for (const f in S.moves) if (S.moves[f]===k) S.moves[f]=to;
@@ -411,6 +415,15 @@ document.addEventListener("change",async e=>{
   const s = e.target.closest("select.bucket"); if (!s) return;
   const en = S.entries.find(x=>x.id===s.dataset.e); if (!en) return;
   en.items[+s.dataset.i].b = s.value; await persist(en); render();
+});
+
+document.addEventListener("click", async ev=>{
+  const t=ev.target.closest("[data-del],[data-del-yes],[data-del-no]"); if (!t) return;
+  if (t.hasAttribute("data-del")){ S.confirmDel=t.dataset.del; render(true); return; }
+  if (t.hasAttribute("data-del-no")){ S.confirmDel=null; render(true); return; }
+  const en=S.entries.find(x=>x.id===t.dataset.delYes); S.confirmDel=null;
+  if (en){ en.deleted=true; en.items=[]; en.text=""; en.reminders=[]; await persist(en); }
+  render(true);
 });
 
 /* ---------- speech ---------- */
@@ -546,7 +559,7 @@ const getKey = ()=>{ try{return localStorage.getItem("diary.apikey")||""}catch{r
 function wireSettings(){
   const st=$("#setStatus"); if (!st) return;
   $("#exportBtn").onclick = async()=>{
-    const data = JSON.stringify({app:"voice-diary",version:1,exportedAt:new Date().toISOString(),entries:S.entries,chapters:BUCKETS,reviews:S.reviews},null,2);
+    const data = JSON.stringify({app:"voice-diary",version:1,exportedAt:new Date().toISOString(),entries:alive(),chapters:BUCKETS,reviews:S.reviews},null,2);
     const filename = `voice-diary-${iso(new Date())}.json`;
     if (S.downloads){ try{ await S.downloads.save({filename,data}); st.textContent="Backup saved."; }catch(e){ st.textContent = e.code==="declined"?"Export cancelled.":"Export isn't available here."; } return; }
     try{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([data],{type:"application/json"})); a.download=filename; a.click(); st.textContent="Backup saved."; }
@@ -639,7 +652,7 @@ async function syncNow(){
   const auth={authorization:"Bearer "+pw};
   let r;
   try{ r=await fetch("api/diary",{headers:auth,cache:"no-store"}); }catch{ setSyncState("Offline. Your changes are saved on this phone and will sync later."); return; }
-  if (r.status===401){ setSyncState("The server didn't accept that password."); if (!S.entries.length){ try{localStorage.removeItem("diary.syncpass")}catch{} render(true); } return; }
+  if (r.status===401){ setSyncState("The server didn't accept that password."); if (!alive().length){ try{localStorage.removeItem("diary.syncpass")}catch{} render(true); } return; }
   if (r.status===429){ setSyncState("Too many wrong passwords. Try again in 15 minutes."); return; }
   if (!r.ok){ setSyncState("Saving to your server isn't set up yet."); return; }
   const srv = await r.json();

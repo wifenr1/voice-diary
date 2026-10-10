@@ -289,7 +289,7 @@ async function callTool(name, a = {}) {
     const d = await load();
     const to = a.to || today();
     const names = Object.fromEntries(chaptersOf(d).map((c) => [c.k, c.name]));
-    const entries = (d.entries || []).filter((e) => e.date >= a.from && e.date <= to).map((e) => ({
+    const entries = (d.entries || []).filter((e) => !e.deleted && e.date >= a.from && e.date <= to).map((e) => ({
       id: e.id, date: e.date, time: e.time, sorted_by: e.source === "claude" ? "claude" : "app",
       transcript: e.source === "claude" ? undefined : e.text,
       points: (e.items || []).map((i) => ({ chapter: i.b, chapter_name: names[i.b] || i.b, text: i.t })),
@@ -300,7 +300,7 @@ async function callTool(name, a = {}) {
   if (name === "tidy_entry") {
     if (typeof a.id !== "string" || !Array.isArray(a.points) || !a.points.length) return fail("Give the entry id and at least one point.");
     return withDiary(async (d) => {
-      const old = (d.entries || []).find((e) => e.id === a.id);
+      const old = (d.entries || []).find((e) => e.id === a.id && !e.deleted);
       if (!old) return fail(`No entry with id ${a.id}. Use list_entries to find it.`);
       const keys = new Set(chaptersOf(d).map((c) => c.k));
       const unknown = a.points.filter((p) => !keys.has(p.chapter)).map((p) => p.chapter);
