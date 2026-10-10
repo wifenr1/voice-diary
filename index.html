@@ -227,7 +227,9 @@ const store = { get(){try{return JSON.parse(localStorage.getItem("diary.entries"
 const isHeading = t=>BUCKETS.some(b=>b.name.toLowerCase()===String(t).replace(/[*#:_]/g,"").trim().toLowerCase());
 // Deleted entries stay as a marker so the deletion syncs to the server and other phones.
 const alive = ()=>S.entries.filter(e=>!e.deleted);
-function visible(){ return (alive().length ? alive() : EXAMPLES).map(e=>({...e,items:e.items.map((it,i)=>({...it,_i:i})).filter(it=>!isHeading(it.t))})); }
+// On the home-screen app your real (maybe empty) diary shows, never the examples.
+const showExamples = ()=>!alive().length && !(HOSTED && getSyncPass());
+function visible(){ return (showExamples() ? EXAMPLES : alive()).map(e=>({...e,items:e.items.map((it,i)=>({...it,_i:i})).filter(it=>!isHeading(it.t))})); }
 function byDay(){
   const m = {};
   for (const e of visible()) (m[e.date] ||= []).push(e);
@@ -239,6 +241,7 @@ function byDay(){
 function band(small){ return `<div class="band${small?" small":""}" aria-hidden="true"></div>`; }
 function exampleBanner(){
   if (alive().length) return "";
+  if (!showExamples()) return `<div class="banner"><span>Nothing here yet. Tell Claude <b>"Diary: …"</b> about your day, or tap <b>Speak</b>.</span></div>`;
   return `<div class="banner"><span class="tag-ex">Example</span><span>These pages show how your diary will look. They disappear when you save your first entry.</span></div>`;
 }
 
