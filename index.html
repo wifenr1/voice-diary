@@ -236,6 +236,7 @@ const views = {
       <div class="recorder">
         <button class="mic" id="mic" aria-label="Start speaking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
         <div class="mic-label" id="micLabel">Tap to speak</div>
+        <div class="row" style="justify-content:center;gap:6px" role="group" aria-label="Language I speak">${[["en-GB","English"],["de-DE","Deutsch"]].map(([c,n])=>`<button class="btn ${getLang()===c?"":"ghost "}sm" data-lang="${c}" aria-pressed="${getLang()===c}">${n}</button>`).join("")}</div>
         <textarea id="draft" placeholder="Your words appear here. You can also tap the microphone on your phone's keyboard and dictate straight into this box."></textarea>
         <div class="row"><button class="btn" id="save">Save & sort into chapters</button><span class="status" id="saveStatus"></span></div>
       </div>
@@ -414,7 +415,10 @@ document.addEventListener("change",async e=>{
 
 /* ---------- speech ---------- */
 let rec=null;
+// The phone's own language (often German) garbles English speech, so the language is chosen here.
+const getLang = ()=>{ try{return localStorage.getItem("diary.lang")||"en-GB"}catch{return "en-GB"} };
 function wireSpeak(){
+  document.querySelectorAll("[data-lang]").forEach(b=>b.onclick=()=>{ if (rec) rec.stop(); try{localStorage.setItem("diary.lang",b.dataset.lang)}catch{} render(true); });
   const mic=$("#mic"), label=$("#micLabel"), draft=$("#draft");
   try{ draft.value = localStorage.getItem("diary.draft")||""; }catch{}
   draft.oninput = ()=>{ try{localStorage.setItem("diary.draft",draft.value)}catch{} };
@@ -422,7 +426,7 @@ function wireSpeak(){
   mic.onclick = ()=>{
     if (!SR){ label.textContent="Tap the box below, then the microphone on your keyboard to dictate."; draft.focus(); return; }
     if (rec){ rec.stop(); return; }
-    rec = new SR(); rec.continuous=true; rec.interimResults=true; rec.lang = navigator.language || "en-GB";
+    rec = new SR(); rec.continuous=true; rec.interimResults=true; rec.lang = getLang();
     const base = draft.value ? draft.value.trimEnd()+"\n" : "";
     let finalText="";
     rec.onresult = ev=>{ let interim="";
