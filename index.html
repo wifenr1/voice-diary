@@ -205,8 +205,18 @@ function byDay(){
 /* ---------- views ---------- */
 function band(small){ return `<div class="band${small?" small":""}" aria-hidden="true"></div>`; }
 function exampleBanner(){
-  return S.entries.length ? "" : `<div class="banner"><span class="tag-ex">Example</span><span>These pages show how your diary will look. They disappear when you save your first entry.</span></div>`;
+  if (S.entries.length) return "";
+  if (HOSTED && !getSyncPass()) return `<div class="banner" style="flex-wrap:wrap"><span>Already have a diary? Enter your diary password to load it from your server.</span>
+    <div class="row" style="width:100%"><input id="connectPass" type="password" autocomplete="current-password" placeholder="Diary password"><button class="btn sm" id="connectSave">Load my diary</button></div>
+    <span class="status" style="font-weight:400" id="connectState">${esc(S.syncState)}</span></div>`;
+  return `<div class="banner"><span class="tag-ex">Example</span><span>These pages show how your diary will look. They disappear when you save your first entry.</span></div>`;
 }
+document.addEventListener("click", ev=>{
+  if (ev.target.id!=="connectSave") return;
+  const v=($("#connectPass")||{}).value||""; if (!v) return;
+  try{localStorage.setItem("diary.syncpass",v)}catch{}
+  setSyncState("Connecting…"); syncNow();
+});
 function itemHTML(it, e, idx){
   const k = eff(it), b = B[k];
   const opts = BUCKETS.map(x=>`<option value="${x.k}"${x.k===k?" selected":""}>${esc(x.name)}</option>`).join("");
@@ -610,13 +620,13 @@ const chaptersAt = ()=>{ try{return +localStorage.getItem("diary.chaptersAt")||0
 function markChapters(){ try{ localStorage.setItem("diary.chaptersAt",String(Date.now())); }catch{} queueSync(); }
 let syncTimer=null;
 function queueSync(){ if (!HOSTED || !getSyncPass()) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow,1000); }
-function setSyncState(text){ S.syncState=text; const el=$("#syncState"); if (el) el.textContent=text; }
+function setSyncState(text){ S.syncState=text; for (const id of ["#syncState","#connectState"]){ const el=$(id); if (el) el.textContent=text; } }
 async function syncNow(){
   const pw=getSyncPass(); if (!HOSTED || !pw) return;
   const auth={authorization:"Bearer "+pw};
   let r;
   try{ r=await fetch("api/diary",{headers:auth,cache:"no-store"}); }catch{ setSyncState("Offline. Your changes are saved on this phone and will sync later."); return; }
-  if (r.status===401){ setSyncState("The server didn't accept that password."); return; }
+  if (r.status===401){ setSyncState("The server didn't accept that password."); if (!S.entries.length){ try{localStorage.removeItem("diary.syncpass")}catch{} render(true); } return; }
   if (r.status===429){ setSyncState("Too many wrong passwords. Try again in 15 minutes."); return; }
   if (!r.ok){ setSyncState("Saving to your server isn't set up yet."); return; }
   const srv = await r.json();
